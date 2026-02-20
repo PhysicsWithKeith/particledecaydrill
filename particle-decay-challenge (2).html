@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚛️ Particle Decay Challenge</title>
+  <style>
+    /* ========================================================
+       RESET & BASE STYLES
+       ======================================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #07071a;
+      color: #f0f0ff;
+      /* Fun, distinctive font stack - no external deps */
+      font-family: 'Trebuchet MS', 'Lucida Grande', 'Verdana', sans-serif;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ========================================================
+       ANIMATED STARFIELD CANVAS (background)
+       ======================================================== */
+    #starfield {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ========================================================
+       FLOATING GREEK LETTERS (decorative, behind content)
+       ======================================================== */
+    .float-sym {
+      position: fixed;
+      top: 0;          /* anchor at top of viewport so translateY range covers full screen */
+      z-index: 1;
+      pointer-events: none;
+      color: rgba(130, 180, 255, 0.12);
+      animation: drift linear infinite;
+      font-family: Georgia, serif;
+      user-select: none;
+    }
+    @keyframes drift {
+      /* Rise from below bottom of screen all the way above the top */
+      from { transform: translateY(105vh) rotate(0deg); }
+      to   { transform: translateY(-12vh) rotate(360deg); }
+    }
+
+    /* ========================================================
+       SCREEN SYSTEM — only .active is visible
+       ======================================================== */
+    .screen {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 16px;
+      gap: 10px;
+    }
+    .screen.active { display: flex; }
+
+    /* ========================================================
+       SHARED COMPONENT: CARD
+       ======================================================== */
+    .card {
+      background: rgba(255, 255, 255, 0.055);
+      border: 1.5px solid rgba(255, 255, 255, 0.14);
+      border-radius: 20px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    /* ========================================================
+       SHARED COMPONENT: BUTTONS
+       ======================================================== */
+    .btn {
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    }
+    .btn:hover:not(:disabled) { transform: translateY(-2px); }
+    .btn:active:not(:disabled) { transform: translateY(0); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Colour variants */
+    .btn-green  { background: linear-gradient(135deg,#1dd1a1,#10ac84); color:#fff; box-shadow:0 4px 18px rgba(29,209,161,0.35); }
+    .btn-red    { background: linear-gradient(135deg,#ff6b6b,#c0392b); color:#fff; box-shadow:0 4px 18px rgba(255,107,107,0.35); }
+    .btn-cyan   { background: linear-gradient(135deg,#48dbfb,#0abde3); color:#07071a; box-shadow:0 4px 18px rgba(72,219,251,0.35); }
+    .btn-amber  { background: linear-gradient(135deg,#feca57,#f9ca24); color:#07071a; box-shadow:0 4px 18px rgba(254,202,87,0.35); }
+    .btn-ghost  { background: rgba(255,255,255,0.07); border:1.5px solid rgba(255,107,107,0.55); color:#ff8080; font-size:12px; }
+
+    .btn:hover.btn-green  { box-shadow:0 6px 30px rgba(29,209,161,0.55); }
+    .btn:hover.btn-red    { box-shadow:0 6px 30px rgba(255,107,107,0.55); }
+    .btn:hover.btn-cyan   { box-shadow:0 6px 30px rgba(72,219,251,0.55); }
+    .btn:hover.btn-amber  { box-shadow:0 6px 30px rgba(254,202,87,0.55); }
+    .btn:hover.btn-ghost  { background: rgba(255,107,107,0.18); }
+
+    /* ========================================================
+       ==================== INTRO SCREEN ====================
+       ======================================================== */
+    #intro-screen { gap: 12px; }
+
+    .game-title {
+      font-size: clamp(26px, 4.5vw, 50px);
+      font-weight: 900;
+      letter-spacing: 2px;
+      /* Rainbow gradient text */
+      background: linear-gradient(135deg, #ff6b6b 0%, #feca57 30%, #48dbfb 60%, #ff9ff3 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-align: center;
+      line-height: 1.1;
+    }
+    .game-subtitle {
+      font-size: 13px;
+      color: #8899bb;
+      text-align: center;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-top: -4px;
+    }
+
+    /* Rules card */
+    .rules-card {
+      padding: 18px 24px;
+      max-width: 560px;
+      width: 100%;
+    }
+    .rules-card h3 {
+      color: #feca57;
+      font-size: 16px;
+      margin-bottom: 12px;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+    .rule-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 7px;
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: #ccd;
+    }
+    .rule-icon { flex-shrink: 0; font-size: 15px; line-height: 1.45; }
+
+    /* Conservation laws grid */
+    .cons-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin: 8px 0 6px;
+    }
+    .cons-pill {
+      background: rgba(72,219,251,0.12);
+      border: 1px solid rgba(72,219,251,0.3);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 11.5px;
+      color: #7fe8ff;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    /* Points info */
+    .points-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 4px;
+    }
+    .point-badge {
+      background: rgba(254,202,87,0.12);
+      border: 1px solid rgba(254,202,87,0.3);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: #feca57;
+      text-align: center;
+    }
+
+    #btn-start { font-size: 18px; padding: 13px 44px; }
+
+    /* ========================================================
+       ==================== GAME SCREEN ====================
+       ======================================================== */
+    #game-screen { gap: 8px; }
+
+    /* HUD bar */
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 720px;
+      gap: 8px;
+    }
+
+    .hud-box {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 6px 14px;
+      font-size: 12px;
+      color: #8899bb;
+      text-align: center;
+    }
+    .hud-box .val {
+      display: block;
+      font-size: 20px;
+      font-weight: 700;
+      color: #feca57;
+      line-height: 1.1;
+    }
+    .hud-box.streak .val { color: #ff9ff3; }
+
+    /* Timer */
+    .timer-wrap { display: flex; align-items: center; gap: 8px; }
+    .timer-box {
+      background: rgba(255,255,255,0.07);
+      border: 2px solid #48dbfb;
+      border-radius: 12px;
+      padding: 6px 14px;
+      font-size: 22px;
+      font-weight: 700;
+      color: #48dbfb;
+      font-family: 'Courier New', monospace;
+      min-width: 78px;
+      text-align: center;
+      transition: border-color 0.4s, color 0.4s;
+    }
+    .timer-box.urgent {
+      border-color: #ff6b6b;
+      color: #ff6b6b;
+      animation: blink 0.6s infinite alternate;
+    }
+    @keyframes blink { from { opacity:1; } to { opacity:0.5; } }
+
+    /* Question card */
+    .q-card {
+      padding: 20px 28px;
+      max-width: 720px;
+      width: 100%;
+      text-align: center;
+      transition: border-color 0.35s, box-shadow 0.35s;
+    }
+    .q-card.flash-correct {
+      border-color: #1dd1a1;
+      box-shadow: 0 0 35px rgba(29,209,161,0.28);
+    }
+    .q-card.flash-wrong {
+      border-color: #ff6b6b;
+      box-shadow: 0 0 35px rgba(255,107,107,0.28);
+    }
+
+    .q-label {
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #556;
+      margin-bottom: 6px;
+    }
+
+    /* The decay equation display */
+    .decay-eq {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: clamp(24px, 4.5vw, 40px);
+      font-weight: 700;
+      color: #f0f0ff;
+      line-height: 1.5;
+      margin: 6px 0 10px;
+      /* Ensure overlines render on antiparticles */
+    }
+    /* Antiparticle overline — applied inline to each character that needs a bar */
+    /* .ovl is global so overlines render both in the equation AND in tooltips */
+    .ovl { text-decoration: overline; text-decoration-thickness: 2px; }
+    .decay-eq .arr { color: #feca57; margin: 0 10px; }
+    .decay-eq .plus { color: #8899bb; margin: 0 5px; font-size: 0.75em; vertical-align: middle; }
+
+    .q-prompt {
+      font-size: 14px;
+      color: #aab;
+      margin-bottom: 12px;
+    }
+
+    /* Main answer buttons */
+    .main-btns { display: flex; gap: 14px; justify-content: center; }
+    .main-btns .btn { font-size: 15px; padding: 12px 30px; }
+
+    /* Follow-up section (which conservation law?) */
+    .followup {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      animation: fadeUp 0.3s ease;
+    }
+    .followup.show { display: flex; }
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(8px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .followup-prompt {
+      font-size: 14px;
+      font-weight: 700;
+      color: #feca57;
+    }
+    .cons-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .btn-cons {
+      background: rgba(255,159,243,0.12);
+      border: 1.5px solid rgba(255,159,243,0.35);
+      color: #ff9ff3;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s, transform 0.12s;
+    }
+    .btn-cons:hover:not(:disabled) {
+      background: rgba(255,159,243,0.28);
+      transform: scale(1.04);
+    }
+    .btn-cons:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Feedback text */
+    .feedback {
+      min-height: 28px;
+      font-size: 15px;
+      font-weight: 700;
+      text-align: center;
+      margin-top: 8px;
+      transition: opacity 0.2s;
+    }
+    .feedback.show { animation: popIn 0.3s ease; }
+    .feedback.ok   { color: #1dd1a1; }
+    .feedback.bad  { color: #ff8080; }
+    .feedback.warn { color: #feca57; }
+    @keyframes popIn {
+      0%   { transform: scale(0.6); opacity: 0; }
+      60%  { transform: scale(1.08); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .q-counter {
+      font-size: 11px;
+      color: #445;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+
+    /* ========================================================
+       PARTICLE HOVER TOOLTIP
+       ======================================================== */
+
+    /* Each particle name in the equation gets this class so it's hoverable */
+    .pname {
+      cursor: help;       /* pointer indicates something happens on hover */
+      border-radius: 2px;
+      transition: background 0.12s;
+      padding: 0 2px;
+      /* No underline — tooltip is revealed purely on hover */
+    }
+    .pname:hover {
+      background: rgba(72,219,251,0.12);
+      border-radius: 4px;
+    }
+
+    /* The floating tooltip card */
+    #ptip {
+      position: fixed;
+      z-index: 9999;
+      pointer-events: none;
+      display: none;
+      min-width: 190px;
+      max-width: 240px;
+      background: rgba(10, 12, 35, 0.97);
+      border: 1.5px solid rgba(72,219,251,0.45);
+      border-radius: 14px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 20px rgba(72,219,251,0.12);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      padding: 10px 14px 10px;
+      font-size: 12px;
+      color: #ccd;
+      line-height: 1.5;
+      animation: tipIn 0.15s ease;
+    }
+    @keyframes tipIn {
+      from { opacity:0; transform: scale(0.9) translateY(4px); }
+      to   { opacity:1; transform: scale(1)   translateY(0); }
+    }
+    #ptip .tip-name {
+      font-family: Georgia, serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #f0f0ff;
+      text-align: center;
+      margin-bottom: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    #ptip .tip-quarks {
+      text-align: center;
+      font-family: Georgia, serif;
+      font-size: 14px;
+      color: #feca57;
+      font-weight: 700;
+      margin-bottom: 7px;
+    }
+    #ptip .tip-qn {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+    #ptip .qn-pill {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 7px;
+      padding: 3px 8px;
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #ptip .qn-label { color: #667; font-size: 10px; }
+    #ptip .qn-val   { font-weight: 700; font-size: 12.5px; }
+    #ptip .qn-pos   { color: #1dd1a1; }
+    #ptip .qn-neg   { color: #ff7675; }
+    #ptip .qn-zero  { color: #667; }
+    #ptip .qn-s     { color: #fd9644; }
+    #ptip .qn-lep   { color: #ff9ff3; }
+    #ptip .tip-hint {
+      text-align: center;
+      font-size: 9.5px;
+      color: #446;
+      margin-top: 7px;
+      font-style: italic;
+    }
+
+
+
+    /* ========================================================
+       ==================== END SCREEN ====================
+       ======================================================== */
+    #end-screen { gap: 16px; }
+
+    .end-title {
+      font-size: clamp(28px, 5vw, 52px);
+      font-weight: 900;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+    .end-title.gold  { color: #feca57; text-shadow: 0 0 30px rgba(254,202,87,0.5); }
+    .end-title.green { color: #1dd1a1; text-shadow: 0 0 30px rgba(29,209,161,0.5); }
+    .end-title.cyan  { color: #48dbfb; text-shadow: 0 0 30px rgba(72,219,251,0.5); }
+    .end-title.pink  { color: #ff9ff3; text-shadow: 0 0 30px rgba(255,159,243,0.5); }
+
+    .score-card {
+      padding: 24px 36px;
+      text-align: center;
+      min-width: 300px;
+    }
+    .big-score {
+      font-size: clamp(56px, 12vw, 96px);
+      font-weight: 900;
+      line-height: 1;
+      background: linear-gradient(135deg, #ff6b6b, #feca57, #48dbfb);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .score-sub { font-size: 14px; color: #667; margin-top: 2px; }
+
+    .stats { display: flex; gap: 12px; margin-top: 16px; justify-content: center; }
+    .stat-box {
+      background: rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 10px 18px;
+      text-align: center;
+      min-width: 80px;
+    }
+    .stat-val { font-size: 22px; font-weight: 700; color: #48dbfb; }
+    .stat-lbl { font-size: 10px; color: #667; margin-top: 2px; text-transform: uppercase; letter-spacing: 1px; }
+
+    .end-msg {
+      font-size: 15px;
+      color: #aab;
+      text-align: center;
+      max-width: 420px;
+      line-height: 1.5;
+    }
+
+    #btn-replay { font-size: 18px; padding: 13px 44px; }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================
+     BACKGROUND: ANIMATED STARFIELD CANVAS
+     ============================================================ -->
+<canvas id="starfield"></canvas>
+
+<!-- ============================================================
+     DECORATIVE FLOATING GREEK SYMBOLS
+     ============================================================ -->
+<div id="float-layer"></div>
+
+<!-- ============================================================
+     PARTICLE HOVER TOOLTIP (single shared element, repositioned by JS)
+     ============================================================ -->
+<div id="ptip">
+  <div class="tip-name" id="ptip-name">π⁺</div>
+  <div class="tip-quarks" id="ptip-quarks"></div>
+  <div class="tip-qn" id="ptip-qn"></div>
+  <div class="tip-hint" id="ptip-hint"></div>
+</div>
+
+<!-- ============================================================
+     SCREEN 1: INTRO / RULES
+     ============================================================ -->
+<div id="intro-screen" class="screen active">
+
+  <div class="game-title">⚛️ Particle Decay Challenge</div>
+  <div class="game-subtitle">A-Level Physics Revision</div>
+
+  <div class="card rules-card">
+    <h3>📋 How to Play</h3>
+
+    <div class="rule-row">
+      <span class="rule-icon">⏱️</span>
+      <span>You have <strong>5 minutes</strong> to answer as many decay questions correctly as you can!</span>
+    </div>
+    <div class="rule-row">
+      <span class="rule-icon">🔬</span>
+      <span>Each question shows a particle decay. Decide: is it <strong>Possible</strong> or <strong>Not Possible</strong>?</span>
+    </div>
+    <div class="rule-row">
+      <span class="rule-icon">❓</span>
+      <span>If you say <em>Not Possible</em>, you'll then be asked <strong>which conservation law is broken</strong>.</span>
+    </div>
+    <div class="rule-row">
+      <span class="rule-icon">✅</span>
+      <span>A decay is only <strong>possible</strong> if ALL four quantities are conserved:</span>
+    </div>
+
+    <div class="cons-grid">
+      <div class="cons-pill">⚡ Charge (Q)</div>
+      <div class="cons-pill">🔵 Baryon Number (B)</div>
+      <div class="cons-pill">🟣 Electron Lepton No. (L<sub>e</sub>)</div>
+      <div class="cons-pill">🟡 Muon Lepton No. (L<sub>μ</sub>)</div>
+    </div>
+
+    <div class="rule-row" style="margin-top:4px;">
+      <span class="rule-icon">🏆</span>
+      <span>Scoring:</span>
+    </div>
+    <div class="points-row">
+      <div class="point-badge">Correct "Possible" = <strong>+1 pt</strong></div>
+      <div class="point-badge">Correct "Not Possible" + law = <strong>+2 pts</strong></div>
+      <div class="point-badge">Right "Not Possible", wrong law = <strong>+1 pt</strong></div>
+    </div>
+  </div>
+
+  <button class="btn btn-amber" id="btn-start" onclick="startGame()">🚀 Start Challenge!</button>
+</div>
+
+<!-- ============================================================
+     SCREEN 2: GAMEPLAY
+     ============================================================ -->
+<div id="game-screen" class="screen">
+
+  <!-- HUD: score | streak | timer + end-early -->
+  <div class="hud">
+    <div class="hud-box">
+      Score<span class="val" id="hud-score">0</span>
+    </div>
+    <div class="hud-box streak">
+      Streak 🔥<span class="val" id="hud-streak">0</span>
+    </div>
+    <div class="timer-wrap">
+      <div class="timer-box" id="timer-box">5:00</div>
+      <!-- End early button near the timer as required -->
+      <button class="btn btn-ghost" style="padding:8px 12px;border-radius:10px;" onclick="endGame()">⏹ End Early</button>
+    </div>
+  </div>
+
+  <!-- Main question card -->
+  <div class="card q-card" id="q-card">
+
+    <div class="q-label">Is this particle decay possible?</div>
+
+    <!-- Decay equation rendered here -->
+    <div class="decay-eq" id="decay-eq">
+      π<sup>+</sup> <span class="arr">→</span> μ<sup>+</sup> <span class="plus">+</span> ν<sub>μ</sub>
+    </div>
+
+    <div class="q-prompt">Check all four conservation laws!</div>
+
+    <!-- Step 1 buttons: Possible / Not Possible -->
+    <div class="main-btns">
+      <button class="btn btn-green"  id="btn-yes" onclick="answerMain(true)">✅ Possible</button>
+      <button class="btn btn-red"    id="btn-no"  onclick="answerMain(false)">❌ Not Possible</button>
+    </div>
+
+    <!-- Step 2: which law is violated? (shown only when student says Not Possible correctly) -->
+    <div class="followup" id="followup">
+      <div class="followup-prompt">⚠️ Which quantity is <em>not</em> conserved?</div>
+      <div class="cons-btns">
+        <button class="btn-cons" id="cons-charge"   onclick="answerCons('charge')">⚡ Charge</button>
+        <button class="btn-cons" id="cons-baryon"   onclick="answerCons('baryon')">🔵 Baryon Number</button>
+        <button class="btn-cons" id="cons-electron" onclick="answerCons('electron')">🟣 Electron Lepton No.</button>
+        <button class="btn-cons" id="cons-muon"     onclick="answerCons('muon')">🟡 Muon Lepton No.</button>
+      </div>
+    </div>
+
+    <!-- Feedback text shown after answering -->
+    <div class="feedback" id="feedback"></div>
+
+  </div>
+
+  <div class="q-counter" id="q-counter">Question 1</div>
+</div>
+
+<!-- ============================================================
+     SCREEN 3: END / RESULTS
+     ============================================================ -->
+<div id="end-screen" class="screen">
+
+  <div class="end-title gold" id="end-title">🎉 Time's Up!</div>
+
+  <div class="card score-card">
+    <div class="big-score" id="end-score">0</div>
+    <div class="score-sub">Total Points</div>
+    <div class="stats">
+      <div class="stat-box"><div class="stat-val" id="stat-correct">0</div><div class="stat-lbl">Correct</div></div>
+      <div class="stat-box"><div class="stat-val" id="stat-attempted">0</div><div class="stat-lbl">Attempted</div></div>
+      <div class="stat-box"><div class="stat-val" id="stat-pct">0%</div><div class="stat-lbl">Accuracy</div></div>
+    </div>
+  </div>
+
+  <div class="end-msg" id="end-msg">Keep revising those conservation laws!</div>
+  <button class="btn btn-cyan" id="btn-replay" onclick="resetGame()">🔄 Play Again</button>
+</div>
+
+<!-- ============================================================
+     JAVASCRIPT — ALL GAME LOGIC
+     ============================================================ -->
+<script>
+
+// ================================================================
+// 1. BACKGROUND EFFECTS
+// ================================================================
+
+// --- Starfield ---
+(function() {
+  const cv = document.getElementById('starfield');
+  const cx = cv.getContext('2d');
+  function resize() { cv.width = innerWidth; cv.height = innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Generate 180 stars with random positions, sizes, twinkle phases
+  const stars = Array.from({length:180}, () => ({
+    x: Math.random() * innerWidth,
+    y: Math.random() * innerHeight,
+    r: 0.3 + Math.random() * 1.4,
+    phase: Math.random() * Math.PI * 2,
+    speed: 0.01 + Math.random() * 0.025
+  }));
+
+  function draw() {
+    cx.clearRect(0, 0, cv.width, cv.height);
+    stars.forEach(s => {
+      s.phase += s.speed;
+      const a = 0.25 + 0.75 * Math.abs(Math.sin(s.phase));
+      cx.beginPath();
+      cx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+      cx.fillStyle = `rgba(200,220,255,${a})`;
+      cx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// --- Floating Greek/particle symbols (decorative) ---
+(function() {
+  const syms = ['π','μ','Λ','Σ','Ω','Ξ','γ','η','ν','Δ','K','e','p','n','⚛'];
+  const layer = document.getElementById('float-layer');
+  for (let i = 0; i < 18; i++) {
+    const el = document.createElement('div');
+    el.className = 'float-sym';
+    el.textContent = syms[i % syms.length];
+    el.style.left = `${Math.random() * 100}%`;
+    el.style.fontSize = `${18 + Math.random() * 36}px`;
+    el.style.animationDelay = `${Math.random() * 9}s`;
+    el.style.animationDuration = `${7 + Math.random() * 10}s`;
+    layer.appendChild(el);
+  }
+})();
+
+
+// ================================================================
+// 2. PARTICLE DATA
+//    Each particle key maps to:
+//      html  – HTML string for display (with .ovl for antiparticle overlines)
+//      Q     – electric charge
+//      B     – baryon number
+//      Le    – electron lepton number
+//      Lm    – muon lepton number
+//
+//    PHYSICS NOTES:
+//    • Strangeness is NOT in the game — it is not always conserved (weak decays).
+//    • Only Q, B, Le, Lm are tested (as per A-level specifications).
+//    • Antiparticles: charge, B, Le, Lm all flipped; displayed with overline.
+// ================================================================
+
+// Helper: wrap in overline span (for antiparticle bars)
+const o = t => `<span class="ovl">${t}</span>`;
+const s = t => `<sup>${t}</sup>`;
+const b = t => `<sub>${t}</sub>`;
+
+// ================================================================
+// 2. PARTICLE DATA
+//    Each particle has:
+//      h      – display HTML (with overline spans for antiparticles)
+//      Q      – electric charge
+//      B      – baryon number
+//      Le     – electron lepton number
+//      Lm     – muon lepton number
+//      S      – strangeness (s quark = −1, s̄ quark = +1)
+//      quarks – HTML string of quark content, null for leptons/photon
+//
+//    Quark overlines: antiquarks shown with overline spans.
+//    Strangeness convention: S = −(number of s quarks) + (number of s̄ quarks)
+// ================================================================
+
+// Quark abbreviation helpers for clean quark HTML notation
+const qu = t => `<span class="ovl">${t}</span>`; // antiquark with bar
+
+const PART = {
+  // ---- MESONS (B = 0) ----
+  // π0 = uū or dd̄ (mixed state): S = 0
+  pi0:   { h:`π${s('0')}`,           Q: 0, B: 0, Le: 0, Lm: 0, S: 0,  quarks:`u${qu('u')} or d${qu('d')}` },
+  // π+ = ud̄: S = 0
+  pip:   { h:`π${s('+')}`,           Q: 1, B: 0, Le: 0, Lm: 0, S: 0,  quarks:`u${qu('d')}` },
+  // π− = dū: S = 0
+  pim:   { h:`π${s('−')}`,           Q:-1, B: 0, Le: 0, Lm: 0, S: 0,  quarks:`d${qu('u')}` },
+  // K+ = us̄: one s̄, so S = +1
+  Kp:    { h:`K${s('+')}`,           Q: 1, B: 0, Le: 0, Lm: 0, S: 1,  quarks:`u${qu('s')}` },
+  // K− = sū: one s, so S = −1
+  Km:    { h:`K${s('−')}`,           Q:-1, B: 0, Le: 0, Lm: 0, S:-1,  quarks:`s${qu('u')}` },
+  // K0 = ds̄: S = +1
+  K0:    { h:`K${s('0')}`,           Q: 0, B: 0, Le: 0, Lm: 0, S: 1,  quarks:`d${qu('s')}` },
+  // K̄0 = sd̄: S = −1
+  aK0:   { h:`${o('K')}${s('0')}`,   Q: 0, B: 0, Le: 0, Lm: 0, S:-1,  quarks:`s${qu('d')}` },
+  // η0 = uū or dd̄ or ss̄ (octet): S = 0
+  eta0:  { h:`η${s('0')}`,           Q: 0, B: 0, Le: 0, Lm: 0, S: 0,  quarks:`u${qu('u')} or d${qu('d')} or s${qu('s')}` },
+
+  // ---- BARYONS (B = +1) ----
+  // p = uud: S = 0
+  p:     { h:`p`,                    Q: 1, B: 1, Le: 0, Lm: 0, S: 0,  quarks:`uud` },
+  // n = udd: S = 0
+  n:     { h:`n`,                    Q: 0, B: 1, Le: 0, Lm: 0, S: 0,  quarks:`udd` },
+  // Λ0 = uds: one s, S = −1
+  L0:    { h:`Λ${s('0')}`,           Q: 0, B: 1, Le: 0, Lm: 0, S:-1,  quarks:`uds` },
+  // Σ+ = uus: S = −1
+  Sp:    { h:`Σ${s('+')}`,           Q: 1, B: 1, Le: 0, Lm: 0, S:-1,  quarks:`uus` },
+  // Σ0 = uds: S = −1
+  S0:    { h:`Σ${s('0')}`,           Q: 0, B: 1, Le: 0, Lm: 0, S:-1,  quarks:`uds` },
+  // Σ− = dds: S = −1
+  Sm:    { h:`Σ${s('−')}`,           Q:-1, B: 1, Le: 0, Lm: 0, S:-1,  quarks:`dds` },
+  // Ξ0 = uss: two s, S = −2
+  X0:    { h:`Ξ${s('0')}`,           Q: 0, B: 1, Le: 0, Lm: 0, S:-2,  quarks:`uss` },
+  // Ξ− = dss: S = −2
+  Xm:    { h:`Ξ${s('−')}`,           Q:-1, B: 1, Le: 0, Lm: 0, S:-2,  quarks:`dss` },
+  // Ω− = sss: S = −3
+  Om:    { h:`Ω${s('−')}`,           Q:-1, B: 1, Le: 0, Lm: 0, S:-3,  quarks:`sss` },
+  // Δ+ = uud: S = 0
+  Dp:    { h:`Δ${s('+')}`,           Q: 1, B: 1, Le: 0, Lm: 0, S: 0,  quarks:`uud` },
+  // Δ++ = uuu: S = 0
+  Dpp:   { h:`Δ${s('++')}`,          Q: 2, B: 1, Le: 0, Lm: 0, S: 0,  quarks:`uuu` },
+  // Δ0 = udd: S = 0
+  D0:    { h:`Δ${s('0')}`,           Q: 0, B: 1, Le: 0, Lm: 0, S: 0,  quarks:`udd` },
+  // Δ− = ddd: S = 0
+  Dm:    { h:`Δ${s('−')}`,           Q:-1, B: 1, Le: 0, Lm: 0, S: 0,  quarks:`ddd` },
+
+  // ---- ANTI-BARYONS (B = −1, all quantum numbers flipped from baryon) ----
+  // p̄ = ūūd̄: S = 0
+  ap:    { h:`${o('p')}`,            Q:-1, B:-1, Le: 0, Lm: 0, S: 0,  quarks:`${qu('u')}${qu('u')}${qu('d')}` },
+  // n̄ = ūd̄d̄: S = 0
+  an:    { h:`${o('n')}`,            Q: 0, B:-1, Le: 0, Lm: 0, S: 0,  quarks:`${qu('u')}${qu('d')}${qu('d')}` },
+  // Λ̄0: S = +1 (contains s̄)
+  aL0:   { h:`${o('Λ')}${s('0')}`,   Q: 0, B:-1, Le: 0, Lm: 0, S: 1,  quarks:`${qu('u')}${qu('d')}${qu('s')}` },
+  // Σ̄+ is antiparticle of Σ−: S = +1
+  aSp:   { h:`${o('Σ')}${s('+')}`,   Q: 1, B:-1, Le: 0, Lm: 0, S: 1,  quarks:`${qu('d')}${qu('d')}${qu('s')}` },
+  // Σ̄0: S = +1
+  aS0:   { h:`${o('Σ')}${s('0')}`,   Q: 0, B:-1, Le: 0, Lm: 0, S: 1,  quarks:`${qu('u')}${qu('d')}${qu('s')}` },
+  // Σ̄− is antiparticle of Σ+: S = +1
+  aSm:   { h:`${o('Σ')}${s('−')}`,   Q:-1, B:-1, Le: 0, Lm: 0, S: 1,  quarks:`${qu('u')}${qu('u')}${qu('s')}` },
+  // Ξ̄+: S = +2
+  aXp:   { h:`${o('Ξ')}${s('+')}`,   Q: 1, B:-1, Le: 0, Lm: 0, S: 2,  quarks:`${qu('u')}${qu('s')}${qu('s')}` },
+  // Ξ̄0: S = +2
+  aX0:   { h:`${o('Ξ')}${s('0')}`,   Q: 0, B:-1, Le: 0, Lm: 0, S: 2,  quarks:`${qu('u')}${qu('s')}${qu('s')}` },
+  // Δ̄− is antiparticle of Δ+: S = 0
+  aDm:   { h:`${o('Δ')}${s('−')}`,   Q:-1, B:-1, Le: 0, Lm: 0, S: 0,  quarks:`${qu('u')}${qu('u')}${qu('d')}` },
+  // Δ̄++ is antiparticle of Δ−−: S = 0
+  aDpp:  { h:`${o('Δ')}${s('++')}`,  Q: 2, B:-1, Le: 0, Lm: 0, S: 0,  quarks:`${qu('d')}${qu('d')}${qu('d')}` },
+  // Δ̄−− is antiparticle of Δ++: S = 0
+  aDmm:  { h:`${o('Δ')}${s('−−')}`,  Q:-2, B:-1, Le: 0, Lm: 0, S: 0,  quarks:`${qu('u')}${qu('u')}${qu('u')}` },
+
+  // ---- LEPTONS (B = 0, quarks = null → "Fundamental lepton") ----
+  // e− : Le = +1
+  em:    { h:`e${s('−')}`,           Q:-1, B: 0, Le: 1, Lm: 0, S: 0,  quarks: null },
+  // e+ : Le = −1
+  ep:    { h:`e${s('+')}`,           Q: 1, B: 0, Le:-1, Lm: 0, S: 0,  quarks: null },
+  // νe : Le = +1
+  nue:   { h:`ν${b('e')}`,           Q: 0, B: 0, Le: 1, Lm: 0, S: 0,  quarks: null },
+  // ν̄e : Le = −1
+  anue:  { h:`${o('ν')}${b('e')}`,   Q: 0, B: 0, Le:-1, Lm: 0, S: 0,  quarks: null },
+  // μ− : Lm = +1
+  mum:   { h:`μ${s('−')}`,           Q:-1, B: 0, Le: 0, Lm: 1, S: 0,  quarks: null },
+  // μ+ : Lm = −1
+  mup:   { h:`μ${s('+')}`,           Q: 1, B: 0, Le: 0, Lm:-1, S: 0,  quarks: null },
+  // νμ : Lm = +1
+  numu:  { h:`ν${b('μ')}`,           Q: 0, B: 0, Le: 0, Lm: 1, S: 0,  quarks: null },
+  // ν̄μ : Lm = −1
+  anumu: { h:`${o('ν')}${b('μ')}`,   Q: 0, B: 0, Le: 0, Lm:-1, S: 0,  quarks: null },
+
+  // ---- PHOTON (gauge boson — carries no conserved quantum numbers) ----
+  gamma: { h:`γ`,                    Q: 0, B: 0, Le: 0, Lm: 0, S: 0,  quarks: null },
+};
+
+// ================================================================
+// 3. CONSERVATION LAW CHECKER
+//    Returns null if all quantities conserved (decay is POSSIBLE),
+//    or the name of the FIRST violated quantity.
+//    Order checked: charge → baryon → electron lepton → muon lepton
+// ================================================================
+function checkDecay(parent, products) {
+  const L = PART[parent];
+  // Sum up quantum numbers on the right-hand side
+  const R = products.reduce((acc, k) => {
+    const p = PART[k];
+    return { Q: acc.Q+p.Q, B: acc.B+p.B, Le: acc.Le+p.Le, Lm: acc.Lm+p.Lm };
+  }, {Q:0, B:0, Le:0, Lm:0});
+
+  if (L.Q  !== R.Q)  return 'charge';    // Electric charge violated
+  if (L.B  !== R.B)  return 'baryon';    // Baryon number violated
+  if (L.Le !== R.Le) return 'electron';  // Electron lepton number violated
+  if (L.Lm !== R.Lm) return 'muon';     // Muon lepton number violated
+  return null; // All four conserved → decay is POSSIBLE
+}
+
+
+// ================================================================
+// 4. QUESTION DATABASE
+//    Each entry: { parent: key, products: [key, ...] }
+//    The correct answer is computed dynamically by checkDecay().
+//    Every "invalid" entry has been verified to violate EXACTLY
+//    one conservation law (noted in the comment for transparency).
+// ================================================================
+const QUESTIONS = [
+
+  // ===================================================
+  // VALID DECAYS — all four quantities conserved
+  // ===================================================
+
+  // Pion decays (weak interaction)
+  { parent:'pip',  products:['mup','numu']         }, // π+ → μ+ + νμ
+  { parent:'pim',  products:['mum','anumu']         }, // π− → μ− + ν̄μ
+  { parent:'pi0',  products:['gamma','gamma']       }, // π0 → γ + γ
+  { parent:'eta0', products:['gamma','gamma']       }, // η0 → γ + γ
+
+  // Kaon decays
+  { parent:'Kp',   products:['mup','numu']          }, // K+ → μ+ + νμ
+  { parent:'Km',   products:['mum','anumu']          }, // K− → μ− + ν̄μ
+  { parent:'Kp',   products:['ep','nue']             }, // K+ → e+ + νe  (rare but valid by conservation)
+  { parent:'Kp',   products:['pip','pi0']            }, // K+ → π+ + π0
+  { parent:'K0',   products:['pip','pim']            }, // K0 → π+ + π−
+  { parent:'K0',   products:['pi0','pi0']            }, // K0 → π0 + π0
+
+  // Neutron beta decay
+  { parent:'n',    products:['p','em','anue']       }, // n → p + e− + ν̄e
+
+  // Lambda baryon decays
+  { parent:'L0',   products:['p','pim']             }, // Λ0 → p + π−
+  { parent:'L0',   products:['n','pi0']             }, // Λ0 → n + π0
+
+  // Sigma baryon decays
+  { parent:'Sp',   products:['p','pi0']             }, // Σ+ → p + π0
+  { parent:'Sp',   products:['n','pip']             }, // Σ+ → n + π+
+  { parent:'Sm',   products:['n','pim']             }, // Σ− → n + π−
+  { parent:'S0',   products:['L0','gamma']          }, // Σ0 → Λ0 + γ
+  { parent:'S0',   products:['p','pim']             }, // Σ0 → p + π−
+
+  // Xi (Cascade) baryon decays
+  { parent:'Xm',   products:['L0','pim']            }, // Ξ− → Λ0 + π−
+  { parent:'X0',   products:['L0','pi0']            }, // Ξ0 → Λ0 + π0
+
+  // Omega baryon decay
+  { parent:'Om',   products:['L0','Km']             }, // Ω− → Λ0 + K−
+  { parent:'Om',   products:['X0','pim']            }, // Ω− → Ξ0 + π−
+
+  // Delta resonance decays
+  { parent:'Dpp',  products:['p','pip']             }, // Δ++ → p + π+
+  { parent:'Dp',   products:['p','pi0']             }, // Δ+  → p + π0
+  { parent:'Dp',   products:['n','pip']             }, // Δ+  → n + π+
+  { parent:'D0',   products:['p','pim']             }, // Δ0  → p + π−
+  { parent:'D0',   products:['n','pi0']             }, // Δ0  → n + π0
+  { parent:'Dm',   products:['n','pim']             }, // Δ−  → n + π−
+
+  // Muon leptonic decays
+  { parent:'mum',  products:['em','anue','numu']    }, // μ− → e− + ν̄e + νμ
+  { parent:'mup',  products:['ep','nue','anumu']    }, // μ+ → e+ + νe + ν̄μ
+
+  // Anti-Lambda (mirror of Λ0 → p + π−)
+  { parent:'aL0',  products:['ap','pip']            }, // Λ̄0 → p̄ + π+
+
+  // Semileptonic Xi decay
+  { parent:'Xm',   products:['X0','em','anue']      }, // Ξ− → Ξ0 + e− + ν̄e
+
+
+  // ===================================================
+  // INVALID DECAYS — exactly ONE conservation law broken
+  // Each has been individually verified below (see comments).
+  // ===================================================
+
+  // --- BARYON NUMBER VIOLATED (B is not conserved) ---
+  { parent:'p',    products:['pip','pi0']           },
+  // p → π+ + π0: Q 1=1+0=1✓  B 1≠0+0=0 ✗  Le 0✓  Lm 0✓  → only B ✓
+
+  { parent:'an',   products:['p','em','anue']       },
+  // n̄ → p + e− + ν̄e: Q 0=1−1+0=0✓  B −1≠1+0+0=1 ✗  Le 0=0+1−1=0✓  Lm 0✓  → only B ✓
+
+  { parent:'aL0',  products:['p','pim']             },
+  // Λ̄0 → p + π−: Q 0=1−1=0✓  B −1≠1+0=1 ✗  Le 0✓  Lm 0✓  → only B ✓
+
+  { parent:'ap',   products:['pim','pi0']           },
+  // p̄ → π− + π0: Q −1=−1+0=−1✓  B −1≠0+0=0 ✗  Le 0✓  Lm 0✓  → only B ✓
+
+  // --- CHARGE VIOLATED (Q is not conserved) ---
+  { parent:'L0',   products:['p','pip']             },
+  // Λ0 → p + π+: Q 0≠1+1=2 ✗  B 1=1+0=1✓  Le 0✓  Lm 0✓  → only Q ✓
+
+  { parent:'S0',   products:['p','pip']             },
+  // Σ0 → p + π+: Q 0≠1+1=2 ✗  B 1=1+0=1✓  Le 0✓  Lm 0✓  → only Q ✓
+
+  { parent:'Xm',   products:['p','pim']             },
+  // Ξ− → p + π−: Q −1≠1−1=0 ✗  B 1=1+0=1✓  Le 0✓  Lm 0✓  → only Q ✓
+
+  { parent:'Dpp',  products:['p','pi0']             },
+  // Δ++ → p + π0: Q 2≠1+0=1 ✗  B 1=1+0=1✓  Le 0✓  Lm 0✓  → only Q ✓
+
+  { parent:'Sm',   products:['L0','pip']            },
+  // Σ− → Λ0 + π+: Q −1≠0+1=1 ✗  B 1=1+0=1✓  Le 0✓  Lm 0✓  → only Q ✓
+
+  { parent:'Om',   products:['p','Km']              },
+  // Ω− → p + K−: Q −1≠1−1=0 ✗  B 1=1+0=1✓  Le 0✓  Lm 0✓  → only Q ✓
+
+  // --- ELECTRON LEPTON NUMBER VIOLATED (Le not conserved) ---
+  { parent:'n',    products:['p','em','nue']        },
+  // n → p + e− + νe (wrong: should be ν̄e):
+  // Q 0=1−1+0=0✓  B 1=1✓  Le 0≠0+1+1=2 ✗  Lm 0✓  → only Le ✓
+
+  { parent:'mum',  products:['em','nue','numu']     },
+  // μ− → e− + νe + νμ (both neutrinos wrong species — but let's check):
+  // Q −1=−1+0+0✓  B 0✓  Le 0≠1+1+0=2 ✗  Lm 1=0+0+1=1✓  → only Le ✓
+
+  { parent:'mup',  products:['ep','anue','anumu']   },
+  // μ+ → e+ + ν̄e + ν̄μ:
+  // Q 1=1+0+0✓  B 0✓  Le 0≠−1+(−1)+0=−2 ✗  Lm −1=0+0+(−1)=−1✓  → only Le ✓
+
+  { parent:'pip',  products:['ep','anue']           },
+  // π+ → e+ + ν̄e (should be νe):
+  // Q 1=1+0✓  B 0✓  Le 0≠−1+(−1)=−2 ✗  Lm 0✓  → only Le ✓
+
+  // --- MUON LEPTON NUMBER VIOLATED (Lm not conserved) ---
+  { parent:'pip',  products:['mup','anumu']         },
+  // π+ → μ+ + ν̄μ (should be νμ):
+  // Q 1=1+0✓  B 0✓  Le 0✓  Lm 0≠−1+(−1)=−2 ✗  → only Lm ✓
+
+  { parent:'pim',  products:['mum','numu']          },
+  // π− → μ− + νμ (should be ν̄μ):
+  // Q −1=−1+0✓  B 0✓  Le 0✓  Lm 0≠1+1=2 ✗  → only Lm ✓
+
+  { parent:'Kp',   products:['mup','anumu']         },
+  // K+ → μ+ + ν̄μ (should be νμ):
+  // Q 1=1+0✓  B 0✓  Le 0✓  Lm 0≠−1+(−1)=−2 ✗  → only Lm ✓
+
+  { parent:'Km',   products:['mum','numu']          },
+  // K− → μ− + νμ (should be ν̄μ):
+  // Q −1=−1+0✓  B 0✓  Le 0✓  Lm 0≠1+1=2 ✗  → only Lm ✓
+
+  { parent:'mum',  products:['em','anue','anumu']   },
+  // μ− → e− + ν̄e + ν̄μ (both wrong):
+  // Q −1=−1+0+0✓  B 0✓  Le 0=1+(−1)+0=0✓  Lm 1≠0+0+(−1)=−1 ✗  → only Lm ✓
+];
+
+// ================================================================
+// 5. VALIDATION — run at startup to ensure each question has
+//    the correct expected structure (no hidden double-violations).
+//    Removes or flags problems silently in production.
+// ================================================================
+
+// Remove the first invalid entry that still violates two laws
+// (p → e+ + γ — we noted above it violates both B and Le)
+// The entry was already handled: we replaced/removed it above.
+// We also noted n → p + e+ + ν̄e violates both; replaced with Σ− → Λ0 + π+.
+// The entry for that is now 'Sm' products:['L0','pip'].
+// Let's do a final runtime check and filter out double-violation questions:
+
+// Filter: keep valid decays, and invalid decays that violate EXACTLY ONE quantity.
+// This prevents ambiguous follow-up questions where multiple laws are broken.
+const VALIDATED_QUESTIONS = QUESTIONS.filter(q => {
+  const L = PART[q.parent];
+  const R = q.products.reduce((acc, k) => {
+    const p = PART[k];
+    return { Q: acc.Q+p.Q, B: acc.B+p.B, Le: acc.Le+p.Le, Lm: acc.Lm+p.Lm };
+  }, {Q:0,B:0,Le:0,Lm:0});
+  const violations = [L.Q!==R.Q, L.B!==R.B, L.Le!==R.Le, L.Lm!==R.Lm].filter(Boolean).length;
+  // Keep valid decays (0 violations) OR unambiguous invalids (exactly 1 violation)
+  return violations === 0 || violations === 1;
+});
+
+
+// ================================================================
+// 6. GAME STATE
+// ================================================================
+let score        = 0;
+let streak       = 0;
+let numAnswered  = 0;  // total questions attempted (step 1 + step 2 combined)
+let numCorrect   = 0;  // fully correct step-1 answers
+let timeLeft     = 300; // 5 minutes
+let timerHandle  = null;
+let current      = null;  // current question object
+let pool         = [];    // shuffled question pool
+let phase        = 'main';        // 'main' | 'followup'
+let pendingNext  = false;  // waiting for auto-advance timeout
+let nextTimeout  = null;
+
+
+// ================================================================
+// 7. UTILITY: DISPLAY HELPERS
+// ================================================================
+
+// Build the HTML for a full decay equation: parent → p1 + p2 + ...
+// Each particle symbol is wrapped in a <span class="pname"> so the
+// mouseover tooltip system can pick it up and display its properties.
+function buildEqHTML(parent, products) {
+  const arrow = `<span class="arr">→</span>`;
+  const plus  = `<span class="plus">+</span>`;
+  // Wrap each side in a hoverable .pname span carrying data-key attribute
+  const wrapParticle = k =>
+    `<span class="pname" data-key="${k}" onmouseenter="showTip(event,'${k}')" onmouseleave="hideTip()" onmousemove="moveTip(event)">${PART[k].h}</span>`;
+  const rhs = products.map(wrapParticle).join(` ${plus} `);
+  return `${wrapParticle(parent)} ${arrow} ${rhs}`;
+}
+
+
+// ================================================================
+// 7b. PARTICLE TOOLTIP FUNCTIONS
+//     showTip  — called on mouseenter of a .pname span
+//     hideTip  — called on mouseleave
+//     moveTip  — called on mousemove to keep tooltip near cursor
+// ================================================================
+
+// Helper: format a quantum number value with colour class
+function qnClass(val, special) {
+  if (special) return 'qn-s';     // strangeness gets orange
+  if (val > 0) return 'qn-pos';
+  if (val < 0) return 'qn-neg';
+  return 'qn-zero';
+}
+
+function showTip(event, key) {
+  const p   = PART[key];
+  const tip = document.getElementById('ptip');
+
+  // --- Particle name header ---
+  document.getElementById('ptip-name').innerHTML = p.h;
+
+  // --- Quark composition (or lepton/photon label) ---
+  const qDiv = document.getElementById('ptip-quarks');
+  if (p.quarks) {
+    qDiv.innerHTML = `Quarks: ${p.quarks}`;
+    qDiv.style.display = 'block';
+  } else if (key === 'gamma') {
+    qDiv.innerHTML = `Gauge boson (force carrier)`;
+    qDiv.style.display = 'block';
+  } else {
+    qDiv.innerHTML = `Fundamental lepton`;
+    qDiv.style.display = 'block';
+  }
+
+  // --- Quantum number pills ---
+  // Format: label | coloured value
+  const rows = [
+    { label: 'Charge Q',    val: p.Q,  cls: qnClass(p.Q) },
+    { label: 'Baryon B',    val: p.B,  cls: qnClass(p.B) },
+    { label: 'Strangeness', val: p.S,  cls: qnClass(p.S, true) },
+    { label: 'Lₑ (electron)',val:p.Le, cls: 'qn-lep' },
+    { label: 'Lμ (muon)',   val: p.Lm, cls: 'qn-lep' },
+  ];
+
+  // Display strangeness note if non-zero (weak interaction caveat)
+  const hints = document.getElementById('ptip-hint');
+  if (p.S !== 0) {
+    hints.textContent = '⚠️ Strangeness not conserved in weak decays';
+    hints.style.display = 'block';
+  } else {
+    hints.style.display = 'none';
+  }
+
+  const qn = document.getElementById('ptip-qn');
+  qn.innerHTML = rows.map(r => `
+    <div class="qn-pill">
+      <span class="qn-label">${r.label}</span>
+      <span class="qn-val ${r.cls}">${r.val > 0 ? '+' : ''}${r.val}</span>
+    </div>`).join('');
+
+  tip.style.display = 'block';
+  moveTip(event);
+}
+
+function hideTip() {
+  document.getElementById('ptip').style.display = 'none';
+}
+
+function moveTip(event) {
+  const tip = document.getElementById('ptip');
+  const margin = 14; // gap between cursor and tooltip edge
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Default: tooltip appears to the right and slightly below cursor
+  let x = event.clientX + margin;
+  let y = event.clientY + margin;
+
+  // Flip to left if would overflow right edge
+  if (x + tw > vw - 8) x = event.clientX - tw - margin;
+
+  // Flip up if would overflow bottom edge
+  if (y + th > vh - 8) y = event.clientY - th - margin;
+
+  tip.style.left = x + 'px';
+  tip.style.top  = y + 'px';
+}
+
+// Friendly names for the four conservation laws
+const LAW_NAMES = {
+  charge:   'Charge (Q)',
+  baryon:   'Baryon Number (B)',
+  electron: 'Electron Lepton Number (Lₑ)',
+  muon:     'Muon Lepton Number (Lμ)',
+};
+
+// Fisher–Yates shuffle
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Show a specific screen by id prefix
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(`${name}-screen`).classList.add('active');
+}
+
+
+// ================================================================
+// 8. GAME FLOW FUNCTIONS
+// ================================================================
+
+// ----- START GAME -----
+function startGame() {
+  score = streak = numAnswered = numCorrect = 0;
+  timeLeft = 300;
+  pool = shuffle(VALIDATED_QUESTIONS);
+  phase = 'main';
+  pendingNext = false;
+  clearTimeout(nextTimeout);
+
+  updateHUD();
+  showScreen('game');
+  loadQuestion();
+  startTimer();
+}
+
+// ----- RESET (back to intro) -----
+function resetGame() {
+  clearInterval(timerHandle);
+  clearTimeout(nextTimeout);
+  showScreen('intro');
+}
+
+// ----- TIMER -----
+function startTimer() {
+  clearInterval(timerHandle);
+  timerHandle = setInterval(() => {
+    timeLeft--;
+    renderTimer();
+    if (timeLeft <= 0) endGame();
+  }, 1000);
+}
+
+function renderTimer() {
+  const m = Math.floor(timeLeft / 60);
+  const s = String(timeLeft % 60).padStart(2, '0');
+  const el = document.getElementById('timer-box');
+  el.textContent = `${m}:${s}`;
+  el.classList.toggle('urgent', timeLeft <= 30);
+}
+
+// ----- LOAD NEXT QUESTION -----
+function loadQuestion() {
+  if (pool.length === 0) pool = shuffle(VALIDATED_QUESTIONS); // reshuffle if exhausted
+  current   = pool.pop();
+  phase     = 'main';
+  pendingNext = false;
+
+  // Reset card visuals
+  const card = document.getElementById('q-card');
+  card.className = 'card q-card';
+
+  // Render decay equation
+  document.getElementById('decay-eq').innerHTML = buildEqHTML(current.parent, current.products);
+
+  // Reset main buttons
+  const btnY = document.getElementById('btn-yes');
+  const btnN = document.getElementById('btn-no');
+  btnY.disabled = btnN.disabled = false;
+
+  // Hide followup
+  document.getElementById('followup').classList.remove('show');
+  setConsBtnsDisabled(false);
+
+  // Clear feedback
+  const fb = document.getElementById('feedback');
+  fb.className = 'feedback';
+  fb.textContent = '';
+
+  // Update question counter
+  document.getElementById('q-counter').textContent = `Question ${numAnswered + 1}`;
+}
+
+
+// ----- MAIN ANSWER: POSSIBLE or NOT POSSIBLE -----
+function answerMain(claimedPossible) {
+  if (pendingNext) return;
+
+  const violated = checkDecay(current.parent, current.products);
+  const actuallyPossible = (violated === null);
+
+  // Disable main buttons immediately
+  document.getElementById('btn-yes').disabled = true;
+  document.getElementById('btn-no').disabled = true;
+
+  if (claimedPossible === actuallyPossible) {
+    if (actuallyPossible) {
+      // Correct: said Possible, IS possible → +1
+      score++;
+      streak++;
+      numCorrect++;
+      numAnswered++;
+      flashCard(true);
+      showFeedback('ok', '✅ Correct! All four quantities are conserved!');
+      updateHUD();
+      scheduleNext(2200);
+    } else {
+      // Correct first step: said Not Possible, IS not possible
+      // → ask follow-up question (which law?)
+      phase = 'followup';
+      flashCard(false); // amber tint? let's keep card neutral for follow-up
+      document.getElementById('q-card').className = 'card q-card'; // neutral
+      document.getElementById('followup').classList.add('show');
+      setConsBtnsDisabled(false);
+      // Provide a small prompt but no points yet
+    }
+  } else {
+    // Wrong answer
+    streak = 0;
+    numAnswered++;
+    flashCard(false);
+    if (claimedPossible) {
+      // Said Possible but it's NOT possible
+      showFeedback('bad', `❌ No! ${LAW_NAMES[violated]} is not conserved.`);
+    } else {
+      // Said Not Possible but it IS possible
+      showFeedback('bad', '❌ No! All four quantities are conserved — this decay IS possible.');
+    }
+    updateHUD();
+    scheduleNext(2600);
+  }
+}
+
+
+// ----- FOLLOW-UP ANSWER: WHICH LAW? -----
+function answerCons(answer) {
+  if (phase !== 'followup' || pendingNext) return;
+
+  const violated = checkDecay(current.parent, current.products); // guaranteed non-null here
+  numAnswered++;
+  setConsBtnsDisabled(true);
+
+  if (answer === violated) {
+    // Full correct answer: said Not Possible + correct law → +2
+    score += 2;
+    streak++;
+    numCorrect++;
+    flashCard(true);
+    showFeedback('ok', `✅ Correct! ${LAW_NAMES[violated]} is violated. +2 points!`);
+  } else {
+    // Identified Not Possible correctly (+1) but wrong law (no extra)
+    score += 1;
+    streak = 0;
+    flashCard(false);
+    showFeedback('warn', `⚠️ Almost! It was ${LAW_NAMES[violated]} not conserved. +1 point.`);
+  }
+
+  updateHUD();
+  scheduleNext(2600);
+}
+
+
+// ================================================================
+// 9. UI HELPERS
+// ================================================================
+
+function flashCard(correct) {
+  const card = document.getElementById('q-card');
+  card.className = `card q-card ${correct ? 'flash-correct' : 'flash-wrong'}`;
+}
+
+function showFeedback(type, msg) {
+  const fb = document.getElementById('feedback');
+  fb.className = `feedback show ${type}`;
+  fb.textContent = msg;
+}
+
+function updateHUD() {
+  document.getElementById('hud-score').textContent  = score;
+  document.getElementById('hud-streak').textContent = streak;
+}
+
+function setConsBtnsDisabled(disabled) {
+  document.querySelectorAll('.btn-cons').forEach(b => b.disabled = disabled);
+}
+
+function scheduleNext(ms) {
+  pendingNext = true;
+  nextTimeout = setTimeout(() => {
+    loadQuestion();
+  }, ms);
+}
+
+
+// ================================================================
+// 10. END GAME
+// ================================================================
+function endGame() {
+  clearInterval(timerHandle);
+  clearTimeout(nextTimeout);
+  pendingNext = true; // block any stray clicks
+
+  // Populate end screen
+  document.getElementById('end-score').textContent    = score;
+  document.getElementById('stat-correct').textContent = numCorrect;
+  document.getElementById('stat-attempted').textContent = numAnswered;
+  const pct = numAnswered > 0 ? Math.round((numCorrect / numAnswered) * 100) : 0;
+  document.getElementById('stat-pct').textContent = `${pct}%`;
+
+  const title = document.getElementById('end-title');
+  const msg   = document.getElementById('end-msg');
+
+  if (pct >= 85) {
+    title.textContent = '🏆 Phenomenal!';
+    title.className   = 'end-title gold';
+    msg.textContent   = 'Outstanding work! You have an excellent grasp of particle physics conservation laws!';
+  } else if (pct >= 70) {
+    title.textContent = '🌟 Excellent!';
+    title.className   = 'end-title green';
+    msg.textContent   = 'Great job! A solid understanding — keep an eye on those lepton number subtleties!';
+  } else if (pct >= 50) {
+    title.textContent = '💪 Good Effort!';
+    title.className   = 'end-title cyan';
+    msg.textContent   = 'Getting there! Focus on the difference between electron and muon lepton numbers.';
+  } else {
+    title.textContent = '📚 Keep Revising!';
+    title.className   = 'end-title pink';
+    msg.textContent   = 'Don\'t give up — review all four conservation laws and have another go!';
+  }
+
+  showScreen('end');
+}
+
+</script>
+</body>
+</html>
